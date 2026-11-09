@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FiberOne PowerNMS</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-4">
+<div class="flex flex-wrap justify-between gap-2">
+  <h1 class="text-xl font-bold">FiberOne PowerNMS <span class="text-sm text-gray-500" id="hostLabel">power.fob.net.ng</span></h1>
+  <div class="text-xs">55 POPs | 192.168.20.105-159 | Live status</div>
+</div>
+<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+  <label class="font-semibold">Backend:</label>
+  <input id="apiBase" class="border px-2 py-1 w-64" placeholder="https://41.223.65.16">
+  <button onclick="saveBase()" class="px-3 py-1 bg-black text-white">Save</button>
+  <span id="conn" class="text-gray-600"></span>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mt-3 text-[11px]">
+  <div class="bg-red-600 text-white p-2">CRITICAL - RED<br>&lt;20% | &lt;2hrs<br>Urgent</div>
+  <div class="bg-orange-500 text-white p-2">LOW - ORANGE<br>20-39% | 2-4hrs<br>Monitor</div>
+  <div class="bg-yellow-400 p-2">WARNING - YELLOW<br>40-69% | 4-12hrs<br>OK</div>
+  <div class="bg-green-600 text-white p-2">LIVE OK - GREEN<br>70-100% | &gt;12hrs<br>Normal</div>
+  <div class="bg-gray-400 text-white p-2">OFFLINE - GREY<br>No SNMP / No ping<br>Down</div>
+</div>
+<div class="flex flex-wrap gap-2 mt-3 text-xs">
+  <button onclick="setFilter('ALL')" class="px-3 py-1 bg-black text-white">ALL</button>
+  <button onclick="setFilter('RED')" class="px-2 py-1 bg-white border">RED</button>
+  <button onclick="setFilter('ORANGE')" class="px-2 py-1 bg-white border">ORANGE</button>
+  <button onclick="setFilter('YELLOW')" class="px-2 py-1 bg-white border">YELLOW</button>
+  <button onclick="setFilter('GREEN')" class="px-2 py-1 bg-white border">GREEN</button>
+  <button onclick="setFilter('GREY')" class="px-2 py-1 bg-white border">GREY/DOWN</button>
+  <span id="stats" class="ml-2 font-bold"></span>
+  <span id="time" class="ml-auto text-gray-500"></span>
+</div>
+<div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4"></div>
+<script>
+let pops = [];
+let filter = "ALL";
+function getBase() {
+  const saved = localStorage.getItem("powernms_api_base");
+  if (saved !== null) return saved.replace(/\/$/, "");
+  return "https://41.223.65.16";
+}
+function saveBase() {
+  localStorage.setItem("powernms_api_base", document.getElementById("apiBase").value.trim());
+  load();
+}
+function setConn(msg, ok) {
+  const el = document.getElementById("conn");
+  el.textContent = msg;
+  el.className = ok ? "text-green-700" : "text-red-700";
+}
+async function load() {
+  const base = getBase();
+  document.getElementById("apiBase").value = base;
+  try {
+    const [r1, r2] = await Promise.all([fetch(base + "/api/pops"), fetch(base + "/api/stats")]);
+    if (!r1.ok || !r2.ok) throw new Error("Bad response");
+    pops = await r1.json();
+    const st = await r2.json();
+    document.getElementById("stats").textContent = `Total 55 | RED ${st.red} ORANGE ${st.orange} YELLOW ${st.yellow} GREEN ${st.green} GREY ${st.grey}`;
+    document.getElementById("time").textContent = new Date().toLocaleTimeString();
+    setConn("Connected", true);
+    render();
+  } catch (e) {
+    setConn("Cannot reach backend. Check backend URL/CORS/HTTPS.", false);
+    document.getElementById("stats").textContent = "No live data";
+    document.getElementById("time").textContent = new Date().toLocaleTimeString();
+    if (!pops.length) {
+      document.getElementById("grid").innerHTML = '<div class="bg-white border p-3 text-sm">Rectifier data needs the live backend. Set the backend URL above (your PowerNMS server), make sure it is reachable, and allow CORS if this page is on a different domain.</div>';
+    }
+  }
+}
+function setFilter(f) { filter = f; render(); }
+function render() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const list = filter === "ALL" ? pops : pops.filter(p => p.status && p.status.colour === filter);
+  list.forEach(p => {
+    const d = document.createElement("div");
+    d.className = `p-3 border-2 ${p.status && p.status.css ? p.status.css : "bg-white"}`;
+    d.innerHTML = `<div class="flex justify-between"><b class="text-sm">${p.pop_name || ""}</b><span class="text-[10px]">${p.is_live ? "LIVE" : "DOWN"}</span></div><div class="text-xs">${p.real_ip || ""} - ${p.region || ""}</div><div class="text-xl font-bold mt-1">${p.battery_percent ?? 0}% | ${p.dc_voltage ?? 0}V</div><div class="text-xs">${(p.status && p.status.label) || ""} | ${(p.status && p.status.backup) || ""}</div><div class="text-[10px]">${(p.status && p.status.action) || ""} - ${p.timestamp || ""}</div>`;
+    grid.appendChild(d);
+  });
+}
+document.getElementById("apiBase").value = getBase();
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
