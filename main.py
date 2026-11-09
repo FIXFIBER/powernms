@@ -42,7 +42,7 @@ def poller():
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             }
             print(f"{p['ip']} {v}V {'LIVE' if is_live else 'DOWN'}")
-        time.sleep(60) # Every 60 sec - your spec
+        time.sleep(60) # Every 60 sec 
 
 @app.on_event("startup")
 def start():
